@@ -74,6 +74,11 @@ namespace EzSteam
         }
 
         /// <summary>
+        /// Toggle for echoing sent messages to the OnMessage event.
+        /// </summary>
+        public bool EchoSelf = false;
+
+        /// <summary>
         /// Fired when the chat was entered successfully.
         /// </summary>
         public event EnterEvent OnEnter;
@@ -84,7 +89,8 @@ namespace EzSteam
         public event LeaveEvent OnLeave;
 
         /// <summary>
-        /// Fired when a user sends a message in the chat. Will not be fired for messages the bot sends.
+        /// Fired when a user sends a message in the chat. Will only be fired for messages the bot sends if
+        /// EchoSelf is enabled.
         /// </summary>
         public event MessageEvent OnMessage;
 
@@ -110,6 +116,9 @@ namespace EzSteam
                 Bot.SteamFriends.SendChatRoomMessage(Id, EChatEntryType.ChatMsg, message);
             else
                 Bot.SteamFriends.SendChatMessage(Id, EChatEntryType.ChatMsg, message);
+
+            if (EchoSelf && OnMessage != null)
+                OnMessage(this, Bot.PersonaId, message);
         }
 
         /// <summary>
