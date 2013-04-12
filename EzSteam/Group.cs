@@ -10,7 +10,7 @@ namespace EzSteam
     {
         Guest = 0,
         Owner = 1,
-        Administrator = 2,
+        Officer = 2,
         Member = 4,
         Moderator = 8
     }

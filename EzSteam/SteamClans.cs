@@ -131,10 +131,15 @@ namespace EzSteam
             using (var reader = new BinaryReader(infoMsg.Payload))
             {
                 if (infoMsg.Body.Type == EChatInfoType.StateChange)
+                {
+                    if (infoMsg.Payload.Length == 20)
+                        return; // no rank change
                     reader.ReadBytes(20);
+                }
+
                 if (infoMsg.Body.Type == EChatInfoType.MemberLimitChange)
                     return;
-
+                
                 reader.ReadByte(); // 0
                 ReadString(reader); // MessageObject
                 reader.ReadByte(); // 7
