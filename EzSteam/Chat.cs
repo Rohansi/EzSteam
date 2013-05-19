@@ -7,24 +7,24 @@ using SteamKit2;
 
 namespace EzSteam
 {
+    public enum ChatLeaveReason
+    {
+        JoinFailed,
+        JoinTimeout,
+
+        Left,
+        Disconnected,
+        Kicked,
+        Banned
+    }
+
     public class Chat
     {
-        public enum LeaveReason
-        {
-            JoinFailed,
-            JoinTimeout,
-
-            Left,
-            Disconnected,
-            Kicked,
-            Banned
-        }
-
-        public delegate void EnterEvent(Chat sender);
-        public delegate void LeaveEvent(Chat sender, LeaveReason reason);
-        public delegate void MessageEvent(Chat sender, SteamID messageSender, string message);
-        public delegate void UserEnterEvent(Chat source, SteamID user);
-        public delegate void UserLeaveEvent(Chat source, SteamID user, LeaveReason reason, SteamID sourceUser = null);
+        public delegate void EnterEvent(Chat chat);
+        public delegate void LeaveEvent(Chat chat, ChatLeaveReason reason);
+        public delegate void MessageEvent(Chat chat, Persona user, string message);
+        public delegate void UserEnterEvent(Chat chat, Persona user);
+        public delegate void UserLeaveEvent(Chat chat, Persona user, ChatLeaveReason reason, Persona sourceUser = null);
 
         /// <summary>
         /// Provides access to the associated Bot instance.
@@ -118,13 +118,13 @@ namespace EzSteam
                 Bot.SteamFriends.SendChatMessage(Id, EChatEntryType.ChatMsg, message);
 
             if (EchoSelf && OnMessage != null)
-                OnMessage(this, Bot.PersonaId, message);
+                OnMessage(this, new Persona(Bot, Bot.PersonaId), message);
         }
 
         /// <summary>
         /// Leave the chat. Will trigger OnLeave.
         /// </summary>
-        public void Leave(LeaveReason reason)
+        public void Leave(ChatLeaveReason reason)
         {
             IsActive = false;
             Bot.SteamFriends.LeaveChat(Id);
@@ -171,7 +171,7 @@ namespace EzSteam
         internal void Handle(CallbackMsg msg)
         {
             if (timeout.Elapsed.TotalSeconds > 5)
-                Leave(LeaveReason.JoinTimeout);
+                Leave(ChatLeaveReason.JoinTimeout);
 
             msg.Handle<SteamClans.ChatEnterCallback>(callback =>
             {
@@ -180,7 +180,7 @@ namespace EzSteam
 
                 if (callback.EnterResponse != EChatRoomEnterResponse.Success)
                 {
-                    Leave(LeaveReason.JoinFailed);
+                    Leave(ChatLeaveReason.JoinFailed);
                     return;
                 }
 
@@ -196,7 +196,7 @@ namespace EzSteam
                     return;
 
                 if (OnMessage != null)
-                    OnMessage(this, callback.ChatterID, callback.Message);
+                    OnMessage(this, new Persona(Bot, callback.ChatterID), callback.Message);
             });
 
             msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
@@ -205,7 +205,7 @@ namespace EzSteam
                     return;
 
                 if (OnMessage != null)
-                    OnMessage(this, callback.Sender, callback.Message);
+                    OnMessage(this, new Persona(Bot, callback.Sender), callback.Message);
             });
 
             msg.Handle<SteamFriends.ChatMemberInfoCallback>(callback =>
@@ -218,23 +218,23 @@ namespace EzSteam
                 {
                     case EChatMemberStateChange.Entered:
                         if (OnUserEnter != null)
-                            OnUserEnter(this, callback.StateChangeInfo.ChatterActedOn);
+                            OnUserEnter(this, new Persona(Bot, callback.StateChangeInfo.ChatterActedOn));
 
                         members.Add(callback.StateChangeInfo.ChatterActedOn);
                         break;
 
                     case EChatMemberStateChange.Left:
                     case EChatMemberStateChange.Disconnected:
-                        var leaveReason = state == EChatMemberStateChange.Left ? LeaveReason.Left : LeaveReason.Disconnected;
+                        var leaveReason = state == EChatMemberStateChange.Left ? ChatLeaveReason.Left : ChatLeaveReason.Disconnected;
                         if (OnUserLeave != null)
-                            OnUserLeave(this, callback.StateChangeInfo.ChatterActedOn, leaveReason);
+                            OnUserLeave(this, new Persona(Bot, callback.StateChangeInfo.ChatterActedOn), leaveReason);
 
                         members.Remove(callback.StateChangeInfo.ChatterActedOn);
                         break;
 
                     case EChatMemberStateChange.Kicked:
                     case EChatMemberStateChange.Banned:
-                        var bootReason = state == EChatMemberStateChange.Kicked ? LeaveReason.Kicked : LeaveReason.Banned;
+                        var bootReason = state == EChatMemberStateChange.Kicked ? ChatLeaveReason.Kicked : ChatLeaveReason.Banned;
                         if (callback.StateChangeInfo.ChatterActedOn == Bot.PersonaId)
                         {
                             Leave(bootReason);
@@ -242,7 +242,7 @@ namespace EzSteam
                         else
                         {
                             if (OnUserLeave != null)
-                                OnUserLeave(this, callback.StateChangeInfo.ChatterActedOn, bootReason, callback.StateChangeInfo.ChatterActedBy);
+                                OnUserLeave(this, new Persona(Bot, callback.StateChangeInfo.ChatterActedOn), bootReason, new Persona(Bot, callback.StateChangeInfo.ChatterActedBy));
                         }
 
                         members.Remove(callback.StateChangeInfo.ChatterActedOn);

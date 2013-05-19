@@ -9,25 +9,25 @@ using SteamKit2.Internal;
 
 namespace EzSteam
 {
+    public enum BotDisconnectReason
+    {
+        ConnectFailed,
+        Disconnected,
+
+        WrongPassword,
+        SteamGuard,
+        LoginFailed,
+
+        LoggedOff
+    }
+
     public class Bot
     {
-        public enum DisconnectReason
-        {
-            ConnectFailed,
-            Disconnected,
-
-            WrongPassword,
-            SteamGuard,
-            LoginFailed,
-
-            LoggedOff
-        }
-
-        public delegate void ConnectedEvent(Bot sender);
-        public delegate void DisconnectedEvent(Bot sender, DisconnectReason reason);
-        public delegate void PrivateEnterEvent(Bot sender, Chat chat);
-        public delegate void ChatInviteEvent(Bot sender, SteamID chat, SteamID invitedBy);
-        public delegate void FriendRequestEvent(Bot sender, SteamID user);
+        public delegate void ConnectedEvent(Bot bot);
+        public delegate void DisconnectedEvent(Bot bot, BotDisconnectReason reason);
+        public delegate void PrivateEnterEvent(Bot bot, Chat chat);
+        public delegate void ChatInviteEvent(Bot bot, Persona sender, SteamID chatId);
+        public delegate void FriendRequestEvent(Bot bot, Persona sender);
 
         /// <summary>
         /// Create a new Steam Bot. Username and password must be fore the Steam account you
@@ -178,13 +178,19 @@ namespace EzSteam
         /// <summary>
         /// Disconnect from Steam. Will fire OnDisconnected.
         /// </summary>
-        public void Disconnect()
+        public void Disconnect(BotDisconnectReason reason = BotDisconnectReason.Disconnected)
         {
+            foreach (var chat in chats)
+            {
+                chat.Leave(ChatLeaveReason.Disconnected);
+            }
+            chats.Clear();
+
             SteamClient.Disconnect();
             running = false;
 
             if (OnDisconnected != null)
-                OnDisconnected(this, DisconnectReason.Disconnected);
+                OnDisconnected(this, reason);
         }
 
         /// <summary>
@@ -232,6 +238,14 @@ namespace EzSteam
         }
 
         /// <summary>
+        /// Removes somebody from the bot's friend list.
+        /// </summary>
+        public void RemoveFriend(SteamID id)
+        {
+            SteamFriends.RemoveFriend(id);
+        }
+
+        /// <summary>
         /// Provides access to the internal SteamKit SteamClient instance.
         /// </summary>
         public SteamClient SteamClient;
@@ -267,9 +281,7 @@ namespace EzSteam
                 {
                     if (callback.Result != EResult.OK)
                     {
-                        if (OnDisconnected != null)
-                            OnDisconnected(this, DisconnectReason.ConnectFailed);
-
+                        Disconnect(BotDisconnectReason.ConnectFailed);
                         running = false;
                         return;
                     }
@@ -283,9 +295,7 @@ namespace EzSteam
 
                 msg.Handle<SteamClient.DisconnectedCallback>(callback =>
                 {
-                    if (OnDisconnected != null)
-                        OnDisconnected(this, DisconnectReason.Disconnected);
-
+                    Disconnect();
                     running = false;
                 });
 
@@ -294,17 +304,15 @@ namespace EzSteam
                     if (callback.Result == EResult.OK)
                         return;
 
-                    var res = DisconnectReason.LoginFailed;
+                    var res = BotDisconnectReason.LoginFailed;
 
                     if (callback.Result == EResult.AccountLogonDenied)
-                        res = DisconnectReason.SteamGuard;
+                        res = BotDisconnectReason.SteamGuard;
 
                     if (callback.Result == EResult.InvalidPassword)
-                        res = DisconnectReason.WrongPassword;
+                        res = BotDisconnectReason.WrongPassword;
 
-                    if (OnDisconnected != null)
-                        OnDisconnected(this, res);
-
+                    Disconnect(res);
                     running = false;
                 });
 
@@ -316,8 +324,7 @@ namespace EzSteam
 
                 msg.Handle<SteamUser.LoggedOffCallback>(callback =>
                 {
-                    if (OnDisconnected != null)
-                        OnDisconnected(this, DisconnectReason.LoggedOff);
+                    Disconnect(BotDisconnectReason.LoggedOff);
 
                     running = false;
                 });
@@ -341,17 +348,17 @@ namespace EzSteam
                     {
                         var f = friend;
                         if (friend.Relationship == EFriendRelationship.RequestRecipient && OnFriendRequest != null)
-                            OnFriendRequest(this, f.SteamID);
+                            OnFriendRequest(this, new Persona(this, f.SteamID));
                     }
                 });
 
                 msg.Handle<SteamFriends.ChatInviteCallback>(callback =>
                 {
                     if (OnChatInvite != null)
-                        OnChatInvite(this, callback.ChatRoomID, callback.PatronID);
+                        OnChatInvite(this, new Persona(this, callback.PatronID), callback.ChatRoomID);
                 });
 
-                foreach (var c in chats)
+                foreach (var c in chats.ToList())
                 {
                     c.Handle(msg);
                 }
