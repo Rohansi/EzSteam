@@ -43,9 +43,17 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets the game name the persona is currently playing.
+        /// Gets the game the persona is currently playing.
         /// </summary>
-        public string Playing
+        public GameID Playing
+        {
+            get { return Bot.SteamFriends.GetFriendGamePlayed(Id); }
+        }
+
+        /// <summary>
+        /// Gets the name of the game the persona is currently playing.
+        /// </summary>
+        public string PlayingName
         {
             get { return Bot.SteamFriends.GetFriendGamePlayedName(Id); }
         }
