@@ -198,10 +198,6 @@ namespace EzSteam
         /// </summary>
         public Chat Join(SteamID roomId)
         {
-            // TODO: status check
-
-            SteamFriends.RequestFriendInfo(roomId);
-
             if (roomId.IsClanAccount)
             {
                 SteamFriends.RequestFriendInfo(roomId, EClientPersonaStateFlag.ClanInfo | EClientPersonaStateFlag.ClanTag | EClientPersonaStateFlag.PlayerName);
@@ -225,7 +221,6 @@ namespace EzSteam
         /// </summary>
         public Persona GetPersona(SteamID id)
         {
-            SteamFriends.RequestFriendInfo(id);
             return id.IsIndividualAccount ? new Persona(this, id) : null;
         }
 
