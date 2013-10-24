@@ -78,7 +78,19 @@ namespace EzSteam
         public EPersonaState PersonaState
         {
             get { return SteamFriends.GetPersonaState(); }
-            set { SteamFriends.SetPersonaState(value); }
+            set
+            {
+                // steam removes us from chats if we switch to offline
+                if (value == EPersonaState.Offline && PersonaState != EPersonaState.Offline)
+                {
+                    foreach (var chat in Chats)
+                    {
+                        chat.Leave(ChatLeaveReason.Disconnected);
+                    }
+                }
+
+                SteamFriends.SetPersonaState(value);
+            }
         }
 
         /// <summary>
