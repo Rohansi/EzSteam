@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using SteamKit2;
 
 namespace EzSteam
@@ -126,8 +124,13 @@ namespace EzSteam
         /// </summary>
         public void Leave(ChatLeaveReason reason)
         {
+            if (!IsActive)
+                return;
+
             IsActive = false;
-            Bot.SteamFriends.LeaveChat(Id);
+
+            if (Bot.Running)
+                Bot.SteamFriends.LeaveChat(Id);
 
             if (OnLeave != null)
                 OnLeave(this, reason);
@@ -138,7 +141,8 @@ namespace EzSteam
         /// </summary>
         public void Kick(SteamID user)
         {
-            Bot.SteamFriends.KickChatMember(Id, user);
+            if (Bot.Running)
+                Bot.SteamFriends.KickChatMember(Id, user);
         }
 
         /// <summary>
@@ -146,7 +150,8 @@ namespace EzSteam
         /// </summary>
         public void Ban(SteamID user)
         {
-            Bot.SteamFriends.BanChatMember(Id, user);
+            if (Bot.Running)
+                Bot.SteamFriends.BanChatMember(Id, user);
         }
 
         /// <summary>
@@ -154,7 +159,8 @@ namespace EzSteam
         /// </summary>
         public void Unban(SteamID user)
         {
-            Bot.SteamFriends.UnbanChatMember(Id, user);
+            if (Bot.Running)
+                Bot.SteamFriends.UnbanChatMember(Id, user);
         }
 
         private readonly List<SteamID> members = new List<SteamID>();

@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using SteamKit2;
 using SteamKit2.Internal;
@@ -135,9 +133,13 @@ namespace EzSteam
         /// <summary>
         /// Gets a list of chats the bot is currently in.
         /// </summary>
-        public IEnumerable<Chat> Chats
+        public List<Chat> Chats
         {
-            get { return chats.ToList(); }
+            get
+            {
+                lock (chats)
+                    return chats.ToList();
+            }
         } 
 
         /// <summary>
@@ -182,7 +184,8 @@ namespace EzSteam
             SteamClient.Connect();
 
             chats = new List<Chat>();
-            running = true;
+
+            Running = true;
             updateThread = new Thread(Run);
             updateThread.Start();
         }
@@ -192,14 +195,16 @@ namespace EzSteam
         /// </summary>
         public void Disconnect(BotDisconnectReason reason = BotDisconnectReason.Disconnected)
         {
-            foreach (var chat in chats)
+            SteamClient.Disconnect();
+            Running = false;
+
+            foreach (var chat in Chats)
             {
                 chat.Leave(ChatLeaveReason.Disconnected);
             }
-            chats.Clear();
 
-            SteamClient.Disconnect();
-            running = false;
+            lock (chats)
+                chats.Clear();
 
             if (OnDisconnected != null)
                 OnDisconnected(this, reason);
@@ -216,12 +221,15 @@ namespace EzSteam
                 roomId = Util.ChatFromClan(roomId);
             }
 
-            if (chats.Any(c => c.Id == roomId))
-                return chats.Find(c => c.Id == roomId);
+            var chatsCopy = Chats;
+            if (chatsCopy.Any(c => c.Id == roomId && c.IsActive))
+                return chatsCopy.Find(c => c.Id == roomId);
 
             var chat = new Chat(this, roomId);
             SteamFriends.JoinChat(roomId);
-            chats.Add(chat);
+
+            lock (chats)
+                chats.Add(chat);
 
             return chat;
         }
@@ -267,29 +275,35 @@ namespace EzSteam
         /// </summary>
         public SteamFriends SteamFriends;
 
+        internal SteamClans SteamClans;
+        internal bool Running;
+
         private readonly string username;
         private readonly string password;
-        internal SteamClans SteamClans;
 
         private List<Chat> chats;
-
         private Thread updateThread;
-        private bool running;
-
         private string playing;
 
         private void Run()
         {
-            while (running)
+            while (Running)
             {
-                var msg = SteamClient.WaitForCallback(true);
+                lock (chats)
+                    chats.RemoveAll(c => !c.IsActive);
+
+                var msg = SteamClient.GetCallback(true);
+                if (msg == null)
+                {
+                    Thread.Sleep(1);
+                    continue;
+                }
 
                 msg.Handle<SteamClient.ConnectedCallback>(callback =>
                 {
                     if (callback.Result != EResult.OK)
                     {
                         Disconnect(BotDisconnectReason.ConnectFailed);
-                        running = false;
                         return;
                     }
 
@@ -303,7 +317,6 @@ namespace EzSteam
                 msg.Handle<SteamClient.DisconnectedCallback>(callback =>
                 {
                     Disconnect();
-                    running = false;
                 });
 
                 msg.Handle<SteamUser.LoggedOnCallback>(callback =>
@@ -320,7 +333,6 @@ namespace EzSteam
                         res = BotDisconnectReason.WrongPassword;
 
                     Disconnect(res);
-                    running = false;
                 });
 
                 msg.Handle<SteamUser.LoginKeyCallback>(callback =>
@@ -332,15 +344,13 @@ namespace EzSteam
                 msg.Handle<SteamUser.LoggedOffCallback>(callback =>
                 {
                     Disconnect(BotDisconnectReason.LoggedOff);
-
-                    running = false;
                 });
 
                 msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
                 {
                     if (callback.EntryType != EChatEntryType.ChatMsg) return;
 
-                    if (chats.Count(c => c.Id == callback.Sender) == 0)
+                    if (Chats.Count(c => c.Id == callback.Sender) == 0)
                     {
                         var c = Join(callback.Sender);
 
@@ -365,12 +375,10 @@ namespace EzSteam
                         OnChatInvite(this, new Persona(this, callback.PatronID), callback.ChatRoomID);
                 });
 
-                foreach (var c in chats.ToList())
+                foreach (var c in Chats)
                 {
                     c.Handle(msg);
                 }
-
-                chats.RemoveAll(c => !c.IsActive);
             }
         }
     }
