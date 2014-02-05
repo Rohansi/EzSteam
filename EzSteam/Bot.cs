@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using SteamKit2;
@@ -285,8 +286,12 @@ namespace EzSteam
         private Thread updateThread;
         private string playing;
 
+        private Stopwatch timeSinceLast;
+
         private void Run()
         {
+            timeSinceLast = Stopwatch.StartNew();
+
             while (Running)
             {
                 lock (chats)
@@ -295,9 +300,18 @@ namespace EzSteam
                 var msg = SteamClient.GetCallback(true);
                 if (msg == null)
                 {
+                    // SteamUser.SessionTokenCallback should come in every 5 minutes
+                    if (timeSinceLast.Elapsed.TotalMinutes >= 10)
+                    {
+                        Disconnect();
+                        break;
+                    }
+
                     Thread.Sleep(1);
                     continue;
                 }
+
+                timeSinceLast.Restart();
 
                 msg.Handle<SteamClient.ConnectedCallback>(callback =>
                 {
