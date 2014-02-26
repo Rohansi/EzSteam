@@ -3,7 +3,7 @@ using SteamKit2;
 
 namespace EzSteam
 {
-    class Util
+    internal static class Util
     {
         public static SteamID ChatFromClan(SteamID clanId)
         {

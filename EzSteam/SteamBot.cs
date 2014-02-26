@@ -5,10 +5,11 @@ using System.Linq;
 using System.Threading;
 using SteamKit2;
 using SteamKit2.Internal;
+using SKSteamUser = SteamKit2.SteamUser;
 
 namespace EzSteam
 {
-    public enum BotDisconnectReason
+    public enum SteamBotDisconnectReason
     {
         ConnectFailed,
         Disconnected,
@@ -20,71 +21,71 @@ namespace EzSteam
         LoggedOff
     }
 
-    public class Bot
+    public sealed class SteamBot
     {
-        public delegate void ConnectedEvent(Bot bot);
-        public delegate void DisconnectedEvent(Bot bot, BotDisconnectReason reason);
-        public delegate void PrivateEnterEvent(Bot bot, Chat chat);
-        public delegate void ChatInviteEvent(Bot bot, Persona sender, SteamID chatId);
-        public delegate void FriendRequestEvent(Bot bot, Persona sender);
+        public delegate void ConnectedEvent(SteamBot bot);
+        public delegate void DisconnectedEvent(SteamBot bot, SteamBotDisconnectReason reason);
+        public delegate void PrivateEnterEvent(SteamBot bot, SteamRoom room);
+        public delegate void RoomInviteEvent(SteamBot bot, SteamUser sender, SteamID roomId);
+        public delegate void FriendRequestEvent(SteamBot bot, SteamUser sender);
 
         /// <summary>
-        /// Create a new Steam Bot. Username and password must be fore the Steam account you
+        /// Create a new SteamBot. Username and password must be for the Steam account you
         /// want it to use. Steam Guard may need to be disabled for login to work.
         /// </summary>
-        public Bot(string username, string password)
+        public SteamBot(string username, string password)
         {
-            this.username = username;
-            this.password = password;
+            _username = username;
+            _password = password;
         }
 
         /// <summary>
-        /// Fired when the Bot successfully connects and logs in to Steam.
+        /// Called when the bot successfully connects and logs into Steam.
         /// </summary>
         public event ConnectedEvent OnConnected;
 
         /// <summary>
-        /// Fired when connection to Steam is lost or fails.
+        /// Called when the connection to Steam is lost.
         /// </summary>
         public event DisconnectedEvent OnDisconnected;
 
         /// <summary>
-        /// Fired when a new private chat must be initialized.
+        /// Called when a new private room should be initialized.
         /// </summary>
         public event PrivateEnterEvent OnPrivateEnter;
 
         /// <summary>
-        /// Fired when somebody invites the bot to a chat.
+        /// Called when somebody invites the bot to a room.
         /// </summary>
-        public event ChatInviteEvent OnChatInvite;
+        public event RoomInviteEvent OnRoomInvite;
 
         /// <summary>
-        /// Fired when somebody adds the bot to its friend list.
+        /// Called when somebody adds the bot to its friend list.
         /// </summary>
         public event FriendRequestEvent OnFriendRequest;
 
         /// <summary>
         /// Gets the SteamID of the logged in Steam account.
         /// </summary>
-        public SteamID PersonaId
+        public SteamID Id
         {
             get { return SteamUser.SteamID; }
         }
 
         /// <summary>
-        /// Gets or sets the persona state of the Steam account.
+        /// Gets or sets the state of the logged in user.
         /// </summary>
-        public EPersonaState PersonaState
+        public EPersonaState State
         {
             get { return SteamFriends.GetPersonaState(); }
             set
             {
                 // steam removes us from chats if we switch to offline
-                if (value == EPersonaState.Offline && PersonaState != EPersonaState.Offline)
+                if (value == EPersonaState.Offline && State != EPersonaState.Offline)
                 {
-                    foreach (var chat in Chats)
+                    foreach (var chat in Rooms)
                     {
-                        chat.Leave(ChatLeaveReason.Disconnected);
+                        chat.Leave(SteamRoomLeaveReason.Disconnected);
                     }
                 }
 
@@ -93,30 +94,30 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets or sets the persona name of the Steam account.
+        /// Gets or sets the display name of the logged in user.
         /// </summary>
-        public string PersonaName
+        public string DisplayName
         {
             get { return SteamFriends.GetPersonaName(); }
             set { SteamFriends.SetPersonaName(value); }
         }
 
         /// <summary>
-        /// Gets the friend list of the Steam account.
+        /// Gets the friend list of the logged in user.
         /// </summary>
-        public IEnumerable<SteamID> Friends
+        public IEnumerable<SteamUser> Friends
         {
             get
             {
                 for (var i = 0; i < SteamFriends.GetFriendCount(); i++)
                 {
-                    yield return SteamFriends.GetFriendByIndex(i);
+                    yield return GetUser(SteamFriends.GetFriendByIndex(i));
                 }
             }
         }
 
         /// <summary>
-        /// Gets the group list of the Steam account.
+        /// Gets the group list of the logged in user.
         /// </summary>
         public IEnumerable<SteamID> Groups
         {
@@ -132,28 +133,28 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets a list of chats the bot is currently in.
+        /// Gets a list of rooms the bot is currently in.
         /// </summary>
-        public List<Chat> Chats
+        public List<SteamRoom> Rooms
         {
             get
             {
-                lock (chats)
-                    return chats.ToList();
+                lock (_rooms)
+                    return _rooms.ToList();
             }
         } 
 
         /// <summary>
-        /// Gets or sets a game the bot should be playing. Only supports non-Steam games.
+        /// Gets or sets a game the logged in user should be playing. Only supports non-Steam games.
         /// </summary>
         public string Playing
         {
-            get { return playing; }
+            get { return _playing; }
             set
             {
-                playing = value;
+                _playing = value;
 
-                if (string.IsNullOrEmpty(playing))
+                if (string.IsNullOrEmpty(_playing))
                 {
                     var msg = new ClientMsgProtobuf<CMsgClientGamesPlayed>(EMsg.ClientGamesPlayedWithDataBlob);
                     msg.Body.games_played.Add(new CMsgClientGamesPlayed.GamePlayed { game_id = 0, game_extra_info = "" });
@@ -162,7 +163,7 @@ namespace EzSteam
                 else
                 {
                     var msg = new ClientMsgProtobuf<CMsgClientGamesPlayed>(EMsg.ClientGamesPlayedWithDataBlob);
-                    msg.Body.games_played.Add(new CMsgClientGamesPlayed.GamePlayed { game_id = 9759487592989982720, game_extra_info = playing });
+                    msg.Body.games_played.Add(new CMsgClientGamesPlayed.GamePlayed { game_id = 9759487592989982720, game_extra_info = _playing });
                     SteamClient.Send(msg);
                 }
             }
@@ -177,44 +178,44 @@ namespace EzSteam
                 throw new Exception("Connect was already called");
 
             SteamClient = new SteamClient();
-            SteamUser = SteamClient.GetHandler<SteamUser>();
+            SteamUser = SteamClient.GetHandler<SKSteamUser>();
             SteamFriends = SteamClient.GetHandler<SteamFriends>();
-            SteamClans = new SteamClans();
+            SteamClans = new SteamClans(this);
             SteamClient.AddHandler(SteamClans);
 
             SteamClient.Connect();
 
-            chats = new List<Chat>();
+            _rooms = new List<SteamRoom>();
 
             Running = true;
-            updateThread = new Thread(Run);
-            updateThread.Start();
+            _updateThread = new Thread(Run);
+            _updateThread.Start();
         }
 
         /// <summary>
         /// Disconnect from Steam. Will fire OnDisconnected.
         /// </summary>
-        public void Disconnect(BotDisconnectReason reason = BotDisconnectReason.Disconnected)
+        public void Disconnect(SteamBotDisconnectReason reason = SteamBotDisconnectReason.Disconnected)
         {
             SteamClient.Disconnect();
             Running = false;
 
-            foreach (var chat in Chats)
+            foreach (var room in Rooms)
             {
-                chat.Leave(ChatLeaveReason.Disconnected);
+                room.Leave(SteamRoomLeaveReason.Disconnected);
             }
 
-            lock (chats)
-                chats.Clear();
+            lock (_rooms)
+                _rooms.Clear();
 
             if (OnDisconnected != null)
                 OnDisconnected(this, reason);
         }
 
         /// <summary>
-        /// Attempt to join a chat. Will fire OnLeave if the chat could not be joined.
+        /// Attempt to join a room. Will fire OnLeave if the room could not be joined.
         /// </summary>
-        public Chat Join(SteamID roomId)
+        public SteamRoom Join(SteamID roomId)
         {
             if (roomId.IsClanAccount)
             {
@@ -222,17 +223,17 @@ namespace EzSteam
                 roomId = Util.ChatFromClan(roomId);
             }
 
-            var chatsCopy = Chats;
-            if (chatsCopy.Any(c => c.Id == roomId && c.IsActive))
-                return chatsCopy.Find(c => c.Id == roomId);
+            var roomsCopy = Rooms;
+            if (roomsCopy.Any(r => r.Id == roomId && r.IsActive))
+                return roomsCopy.Find(r => r.Id == roomId);
 
-            var chat = new Chat(this, roomId);
+            var room = new SteamRoom(this, roomId);
             SteamFriends.JoinChat(roomId);
 
-            lock (chats)
-                chats.Add(chat);
+            lock (_rooms)
+                _rooms.Add(room);
 
-            return chat;
+            return room;
         }
 
         /// <summary>
@@ -240,9 +241,9 @@ namespace EzSteam
         /// not valid. Information may not be instantly available if the user was not 
         /// "seen" before.
         /// </summary>
-        public Persona GetPersona(SteamID id)
+        public SteamUser GetUser(SteamID id)
         {
-            return id.IsIndividualAccount ? new Persona(this, id) : null;
+            return id.IsIndividualAccount ? new SteamUser(this, id) : null;
         }
 
         /// <summary>
@@ -269,7 +270,7 @@ namespace EzSteam
         /// <summary>
         /// Provides access to the internal SteamKit SteamUser instance.
         /// </summary>
-        public SteamUser SteamUser;
+        public SKSteamUser SteamUser;
 
         /// <summary>
         /// Provides access to the internal SteamKit SteamFriends instance.
@@ -279,29 +280,29 @@ namespace EzSteam
         internal SteamClans SteamClans;
         internal bool Running;
 
-        private readonly string username;
-        private readonly string password;
+        private readonly string _username;
+        private readonly string _password;
 
-        private List<Chat> chats;
-        private Thread updateThread;
-        private string playing;
+        private List<SteamRoom> _rooms;
+        private Thread _updateThread;
+        private string _playing;
 
-        private Stopwatch timeSinceLast;
+        private Stopwatch _timeSinceLast;
 
         private void Run()
         {
-            timeSinceLast = Stopwatch.StartNew();
+            _timeSinceLast = Stopwatch.StartNew();
 
             while (Running)
             {
-                lock (chats)
-                    chats.RemoveAll(c => !c.IsActive);
+                lock (_rooms)
+                    _rooms.RemoveAll(c => !c.IsActive);
 
                 var msg = SteamClient.GetCallback(true);
                 if (msg == null)
                 {
                     // SteamUser.SessionTokenCallback should come in every 5 minutes
-                    if (timeSinceLast.Elapsed.TotalMinutes >= 10)
+                    if (_timeSinceLast.Elapsed.TotalMinutes >= 10)
                     {
                         Disconnect();
                         break;
@@ -311,20 +312,20 @@ namespace EzSteam
                     continue;
                 }
 
-                timeSinceLast.Restart();
+                _timeSinceLast.Restart();
 
                 msg.Handle<SteamClient.ConnectedCallback>(callback =>
                 {
                     if (callback.Result != EResult.OK)
                     {
-                        Disconnect(BotDisconnectReason.ConnectFailed);
+                        Disconnect(SteamBotDisconnectReason.ConnectFailed);
                         return;
                     }
 
-                    SteamUser.LogOn(new SteamUser.LogOnDetails
+                    SteamUser.LogOn(new SKSteamUser.LogOnDetails
                     {
-                        Username = username,
-                        Password = password
+                        Username = _username,
+                        Password = _password
                     });
                 });
 
@@ -333,38 +334,38 @@ namespace EzSteam
                     Disconnect();
                 });
 
-                msg.Handle<SteamUser.LoggedOnCallback>(callback =>
+                msg.Handle<SKSteamUser.LoggedOnCallback>(callback =>
                 {
                     if (callback.Result == EResult.OK)
                         return;
 
-                    var res = BotDisconnectReason.LoginFailed;
+                    var res = SteamBotDisconnectReason.LoginFailed;
 
                     if (callback.Result == EResult.AccountLogonDenied)
-                        res = BotDisconnectReason.SteamGuard;
+                        res = SteamBotDisconnectReason.SteamGuard;
 
                     if (callback.Result == EResult.InvalidPassword)
-                        res = BotDisconnectReason.WrongPassword;
+                        res = SteamBotDisconnectReason.WrongPassword;
 
                     Disconnect(res);
                 });
 
-                msg.Handle<SteamUser.LoginKeyCallback>(callback =>
+                msg.Handle<SKSteamUser.LoginKeyCallback>(callback =>
                 {
                     if (OnConnected != null)
                         OnConnected(this);
                 });
 
-                msg.Handle<SteamUser.LoggedOffCallback>(callback =>
+                msg.Handle<SKSteamUser.LoggedOffCallback>(callback =>
                 {
-                    Disconnect(BotDisconnectReason.LoggedOff);
+                    Disconnect(SteamBotDisconnectReason.LoggedOff);
                 });
 
                 msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
                 {
                     if (callback.EntryType != EChatEntryType.ChatMsg) return;
 
-                    if (Chats.Count(c => c.Id == callback.Sender) == 0)
+                    if (Rooms.Count(c => c.Id == callback.Sender) == 0)
                     {
                         var c = Join(callback.Sender);
 
@@ -379,19 +380,19 @@ namespace EzSteam
                     {
                         var f = friend;
                         if (friend.Relationship == EFriendRelationship.RequestRecipient && OnFriendRequest != null)
-                            OnFriendRequest(this, new Persona(this, f.SteamID));
+                            OnFriendRequest(this, new SteamUser(this, f.SteamID));
                     }
                 });
 
                 msg.Handle<SteamFriends.ChatInviteCallback>(callback =>
                 {
-                    if (OnChatInvite != null)
-                        OnChatInvite(this, new Persona(this, callback.PatronID), callback.ChatRoomID);
+                    if (OnRoomInvite != null)
+                        OnRoomInvite(this, new SteamUser(this, callback.PatronID), callback.ChatRoomID);
                 });
 
-                foreach (var c in Chats)
+                foreach (var room in Rooms)
                 {
-                    c.Handle(msg);
+                    room.Handle(msg);
                 }
             }
         }

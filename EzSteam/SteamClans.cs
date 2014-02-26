@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using SteamKit2;
 using SteamKit2.Internal;
 
@@ -21,25 +18,31 @@ namespace EzSteam
             public EChatRoomEnterResponse EnterResponse { get; internal set; }
         }
 
-        private readonly Dictionary<SteamID, Group> clans = new Dictionary<SteamID, Group>(); 
+        private readonly SteamBot _bot;
+        private readonly Dictionary<SteamID, SteamGroup> _clans = new Dictionary<SteamID, SteamGroup>();
 
-        public Group Get(SteamID clanId)
+        public SteamClans(SteamBot bot)
+        {
+            _bot = bot;
+        }
+
+        public SteamGroup Get(SteamID clanId)
         {
             if (clanId.IsChatAccount)
                 clanId = Util.ClanFromChat(clanId);
-            Group res;
-            return clans.TryGetValue(clanId, out res) ? res : null;
+            SteamGroup res;
+            return _clans.TryGetValue(clanId, out res) ? res : null;
         }
 
-        internal Group GetOrAdd(SteamID clanId)
+        internal SteamGroup GetOrAdd(SteamID clanId)
         {
             var clan = Get(clanId);
             if (clan != null)
                 return clan;
             if (clanId.IsChatAccount)
                 clanId = Util.ClanFromChat(clanId);
-            clan = new Group(clanId);
-            clans.Add(clanId, clan);
+            clan = new SteamGroup(_bot, clanId);
+            _clans.Add(clanId, clan);
             return clan;
         }
 
@@ -101,7 +104,7 @@ namespace EzSteam
                         reader.ReadByte(); // 2
 
                         ReadString(reader); // Details
-                        var rank = (ClanRank)reader.ReadByte();
+                        var rank = (SteamGroupRank)reader.ReadByte();
                         reader.ReadBytes(6); // who knows
 
                         clan.SetRank(steamId, rank);
@@ -150,7 +153,7 @@ namespace EzSteam
                 reader.ReadInt32();
                 reader.ReadByte(); // 2
                 ReadString(reader); // Details
-                var rank = (ClanRank)reader.ReadByte();
+                var rank = (SteamGroupRank)reader.ReadByte();
                 
                 clan.SetRank(steamId, rank);
             }

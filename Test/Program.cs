@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using EzSteam;
 using Newtonsoft.Json;
 using SteamKit2;
@@ -11,32 +9,33 @@ namespace Test
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
             dynamic account = JsonConvert.DeserializeObject(File.ReadAllText("account.json"));
             var username = (string)account.Username;
             var password = (string)account.Password;
 
-            var bot = new Bot(username, password);
-            var chatId = new SteamID(103582791434006974); // FPP 103582791430091926 // EBFPP 103582791434006974
+            var bot = new SteamBot(username, password);
+            var roomId = new SteamID(103582791434244897); // FPP
             
             bot.OnConnected += sender =>
             {
                 Console.WriteLine("Connected");
 
-                bot.PersonaName = "Test";
-                bot.PersonaState = EPersonaState.Online;
+                bot.DisplayName = "Test";
+                bot.State = EPersonaState.Online;
 
-                var chat = bot.Join(chatId);
+                var room = bot.Join(roomId);
 
-                chat.OnEnter += steamChat =>
+                room.OnEnter += steamChat =>
                 {
                     Console.WriteLine("Enter");
-                    chat.Send("Hello!");
+                    Console.WriteLine(string.Join(", ", room.Group.Members.Select(m => m.User.DisplayName)));
+                    room.Send("Hello!");
                     bot.Disconnect();
                 };
 
-                chat.OnLeave += (steamChat, reason) =>
+                room.OnLeave += (steamChat, reason) =>
                     Console.WriteLine("Leave " + reason);
             };
 
