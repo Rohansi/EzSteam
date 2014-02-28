@@ -193,7 +193,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Disconnect from Steam. Will fire OnDisconnected.
+        /// Disconnect from Steam. Will call OnDisconnected.
         /// </summary>
         public void Disconnect(SteamBotDisconnectReason reason = SteamBotDisconnectReason.Disconnected)
         {
@@ -213,7 +213,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Attempt to join a room. Will fire OnLeave if the room could not be joined.
+        /// Attempt to join a room. Will call OnLeave if the room could not be joined.
         /// </summary>
         public SteamRoom Join(SteamID roomId)
         {

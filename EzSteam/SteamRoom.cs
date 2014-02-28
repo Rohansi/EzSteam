@@ -77,28 +77,28 @@ namespace EzSteam
         public bool EchoSelf = false;
 
         /// <summary>
-        /// Fired when the room was entered successfully.
+        /// Called when the room was entered successfully.
         /// </summary>
         public event EnterEvent OnEnter;
 
         /// <summary>
-        /// Fired when the bot leaves the room. Will also be called when entering a room fails.
+        /// Called when the bot leaves the room. Will also be called when entering a room fails.
         /// </summary>
         public event LeaveEvent OnLeave;
 
         /// <summary>
-        /// Fired when a user sends a message in the room. Will only be fired for messages the bot sends if
+        /// Called when a user sends a message in the room. Will only be called for messages the bot sends if
         /// EchoSelf is enabled.
         /// </summary>
         public event MessageEvent OnMessage;
 
         /// <summary>
-        /// Fired when a user joins the room.
+        /// Called when a user joins the room.
         /// </summary>
         public event UserEnterEvent OnUserEnter;
 
         /// <summary>
-        /// Fired when a user leaves the room. Provides the reason (and who caused it, if it was a kick/ban).
+        /// Called when a user leaves the room. Provides the reason (and who caused it, if it was a kick/ban).
         /// </summary>
         public event UserLeaveEvent OnUserLeave;
 
