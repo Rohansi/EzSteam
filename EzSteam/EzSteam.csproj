@@ -44,9 +44,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="SteamBot.cs" />
-    <Compile Include="SteamUser.cs" />
+    <Compile Include="SteamPersona.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="SteamRoom.cs" />
+    <Compile Include="SteamChat.cs" />
     <Compile Include="SteamGroup.cs" />
     <Compile Include="SteamClans.cs" />
     <Compile Include="Util.cs" />

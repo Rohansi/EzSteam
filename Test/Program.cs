@@ -16,26 +16,26 @@ namespace Test
             var password = (string)account.Password;
 
             var bot = new SteamBot(username, password);
-            var roomId = new SteamID(103582791434244897); // FPP
+            var chatId = new SteamID(103582791434244897); // FPP
             
             bot.OnConnected += sender =>
             {
                 Console.WriteLine("Connected");
 
                 bot.DisplayName = "Test";
-                bot.State = EPersonaState.Online;
+                bot.PersonaState = EPersonaState.Online;
 
-                var room = bot.Join(roomId);
+                var chat = bot.Join(chatId);
 
-                room.OnEnter += steamChat =>
+                chat.OnEnter += steamChat =>
                 {
                     Console.WriteLine("Enter");
-                    Console.WriteLine(string.Join(", ", room.Group.Members.Select(m => m.User.DisplayName)));
-                    room.Send("Hello!");
+                    Console.WriteLine(string.Join(", ", chat.Group.Members.Select(m => m.Persona.DisplayName)));
+                    chat.Send("Hello!");
                     bot.Disconnect();
                 };
 
-                room.OnLeave += (steamChat, reason) =>
+                chat.OnLeave += (steamChat, reason) =>
                     Console.WriteLine("Leave " + reason);
             };
 

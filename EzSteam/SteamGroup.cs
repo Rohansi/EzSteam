@@ -9,12 +9,12 @@ namespace EzSteam
     {
         public sealed class Member
         {
-            public readonly SteamUser User;
+            public readonly SteamPersona Persona;
             public EClanPermission Rank { get; internal set; }
 
-            public Member(SteamUser user, EClanPermission rank)
+            public Member(SteamPersona persona, EClanPermission rank)
             {
-                User = user;
+                Persona = persona;
                 Rank = rank;
             }
         }
@@ -59,9 +59,9 @@ namespace EzSteam
 
         internal void SetRank(SteamID id, EClanPermission rank)
         {
-            var member = _members.FirstOrDefault(m => m.User.Id == id);
+            var member = _members.FirstOrDefault(m => m.Persona.Id == id);
             if (member == null)
-                _members.Add(new Member(Bot.GetUser(id), rank));
+                _members.Add(new Member(Bot.GetPersona(id), rank));
             else
                 member.Rank = rank;
         }

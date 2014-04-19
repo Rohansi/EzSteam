@@ -2,7 +2,7 @@
 
 namespace EzSteam
 {
-    public sealed class SteamUser
+    public sealed class SteamPersona
     {
         /// <summary>
         /// Provides access to the associated Bot instance.
@@ -10,12 +10,12 @@ namespace EzSteam
         public readonly SteamBot Bot;
 
         /// <summary>
-        /// Gets the user's Steam ID.
+        /// Gets the persona's Steam ID.
         /// </summary>
         public readonly SteamID Id;
 
         /// <summary>
-        /// Gets the user's current name.
+        /// Gets the persona's current name.
         /// </summary>
         public string DisplayName
         {
@@ -23,7 +23,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets the user's current state.
+        /// Gets the persona's current state.
         /// </summary>
         public EPersonaState State
         {
@@ -31,7 +31,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets the user's current avatar.
+        /// Gets the persona's current avatar.
         /// </summary>
         public byte[] Avatar
         {
@@ -39,7 +39,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets the game the user is currently playing.
+        /// Gets the ID of the game the persona is currently playing.
         /// </summary>
         public GameID Playing
         {
@@ -47,14 +47,14 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets the name of the game the user is currently playing.
+        /// Gets the name of the game the persona is currently playing.
         /// </summary>
         public string PlayingName
         {
             get { return Bot.SteamFriends.GetFriendGamePlayedName(Id); }
         }
 
-        internal SteamUser(SteamBot bot, SteamID id)
+        internal SteamPersona(SteamBot bot, SteamID id)
         {
             Bot = bot;
             Id = id;

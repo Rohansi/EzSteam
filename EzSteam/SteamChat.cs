@@ -5,7 +5,7 @@ using SteamKit2;
 
 namespace EzSteam
 {
-    public enum SteamRoomLeaveReason
+    public enum SteamChatLeaveReason
     {
         JoinFailed,
         JoinTimeout,
@@ -16,13 +16,13 @@ namespace EzSteam
         Banned
     }
 
-    public sealed class SteamRoom
+    public sealed class SteamChat
     {
-        public delegate void EnterEvent(SteamRoom room);
-        public delegate void LeaveEvent(SteamRoom room, SteamRoomLeaveReason reason);
-        public delegate void MessageEvent(SteamRoom room, SteamUser user, string message);
-        public delegate void UserEnterEvent(SteamRoom room, SteamUser user);
-        public delegate void UserLeaveEvent(SteamRoom room, SteamUser user, SteamRoomLeaveReason reason, SteamUser sourceUser = null);
+        public delegate void EnterEvent(SteamChat chat);
+        public delegate void LeaveEvent(SteamChat chat, SteamChatLeaveReason reason);
+        public delegate void MessageEvent(SteamChat chat, SteamPersona user, string message);
+        public delegate void UserEnterEvent(SteamChat chat, SteamPersona user);
+        public delegate void UserLeaveEvent(SteamChat chat, SteamPersona user, SteamChatLeaveReason reason, SteamPersona sourceUser = null);
 
         /// <summary>
         /// Provides access to the associated Bot instance.
@@ -30,17 +30,17 @@ namespace EzSteam
         public readonly SteamBot Bot;
 
         /// <summary>
-        /// Gets the SteamID of the room.
+        /// Gets the SteamID of the chat.
         /// </summary>
         public readonly SteamID Id;
 
         /// <summary>
-        /// Returns true while the room is available for use.
+        /// Returns true while the chat is available for use.
         /// </summary>
         public bool IsActive { get; private set; }
 
         /// <summary>
-        /// Gets the title (text that shows up in Steam tabs) of the room.
+        /// Gets the title (text that shows up in Steam tabs) of the chat.
         /// </summary>
         public string Title
         {
@@ -56,15 +56,15 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Gets a list of the users currently in the room.
+        /// Gets a list of the users currently in the chat.
         /// </summary>
-        public IEnumerable<SteamUser> Users
+        public IEnumerable<SteamPersona> Users
         {
-            get { return _users.Select(id => Bot.GetUser(id)).ToList(); }
+            get { return _users.Select(id => Bot.GetPersona(id)).ToList(); }
         }
 
         /// <summary>
-        /// Gets the Group instance (or null if not a group) for the room.
+        /// Gets the Group instance (or null if not a group) for the chat.
         /// </summary>
         public SteamGroup Group
         {
@@ -77,33 +77,33 @@ namespace EzSteam
         public bool EchoSelf = false;
 
         /// <summary>
-        /// Called when the room was entered successfully.
+        /// Called when the chat was entered successfully.
         /// </summary>
         public event EnterEvent OnEnter;
 
         /// <summary>
-        /// Called when the bot leaves the room. Will also be called when entering a room fails.
+        /// Called when the bot leaves the chat. Will also be called when entering a chat fails.
         /// </summary>
         public event LeaveEvent OnLeave;
 
         /// <summary>
-        /// Called when a user sends a message in the room. Will only be called for messages the bot sends if
+        /// Called when a user sends a message in the chat. Will only be called for messages the bot sends if
         /// EchoSelf is enabled.
         /// </summary>
         public event MessageEvent OnMessage;
 
         /// <summary>
-        /// Called when a user joins the room.
+        /// Called when a user joins the chat.
         /// </summary>
         public event UserEnterEvent OnUserEnter;
 
         /// <summary>
-        /// Called when a user leaves the room. Provides the reason (and who caused it, if it was a kick/ban).
+        /// Called when a user leaves the chat. Provides the reason (and who caused it, if it was a kick/ban).
         /// </summary>
         public event UserLeaveEvent OnUserLeave;
 
         /// <summary>
-        /// Send a message to the room.
+        /// Send a message to the chat.
         /// </summary>
         public void Send(string message)
         {
@@ -116,13 +116,13 @@ namespace EzSteam
                 Bot.SteamFriends.SendChatMessage(Id, EChatEntryType.ChatMsg, message);
 
             if (EchoSelf && OnMessage != null)
-                OnMessage(this, new SteamUser(Bot, Bot.Id), message);
+                OnMessage(this, new SteamPersona(Bot, Bot.SteamId), message);
         }
 
         /// <summary>
-        /// Leave the room. Will trigger OnLeave.
+        /// Leave the chat. Will trigger OnLeave.
         /// </summary>
-        public void Leave(SteamRoomLeaveReason reason)
+        public void Leave(SteamChatLeaveReason reason)
         {
             if (!IsActive)
                 return;
@@ -137,7 +137,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Kicks a user from the room.
+        /// Kicks a user from the chat.
         /// </summary>
         public void Kick(SteamID user)
         {
@@ -146,7 +146,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Bans a user from the room.
+        /// Bans a user from the chat.
         /// </summary>
         public void Ban(SteamID user)
         {
@@ -155,7 +155,7 @@ namespace EzSteam
         }
 
         /// <summary>
-        /// Unban a user from the room.
+        /// Unban a user from the chat.
         /// </summary>
         public void Unban(SteamID user)
         {
@@ -166,7 +166,7 @@ namespace EzSteam
         private readonly List<SteamID> _users = new List<SteamID>();
         private readonly Stopwatch _timeout = Stopwatch.StartNew();
 
-        internal SteamRoom(SteamBot bot, SteamID id)
+        internal SteamChat(SteamBot bot, SteamID id)
         {
             Bot = bot;
             Id = id;
@@ -177,7 +177,7 @@ namespace EzSteam
         internal void Handle(CallbackMsg msg)
         {
             if (_timeout.Elapsed.TotalSeconds > 5)
-                Leave(SteamRoomLeaveReason.JoinTimeout);
+                Leave(SteamChatLeaveReason.JoinTimeout);
 
             msg.Handle<SteamClans.ChatEnterCallback>(callback =>
             {
@@ -186,7 +186,7 @@ namespace EzSteam
 
                 if (callback.EnterResponse != EChatRoomEnterResponse.Success)
                 {
-                    Leave(SteamRoomLeaveReason.JoinFailed);
+                    Leave(SteamChatLeaveReason.JoinFailed);
                     return;
                 }
 
@@ -202,7 +202,7 @@ namespace EzSteam
                     return;
 
                 if (OnMessage != null)
-                    OnMessage(this, new SteamUser(Bot, callback.ChatterID), callback.Message);
+                    OnMessage(this, new SteamPersona(Bot, callback.ChatterID), callback.Message);
             });
 
             msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
@@ -211,7 +211,7 @@ namespace EzSteam
                     return;
 
                 if (OnMessage != null)
-                    OnMessage(this, new SteamUser(Bot, callback.Sender), callback.Message);
+                    OnMessage(this, new SteamPersona(Bot, callback.Sender), callback.Message);
             });
 
             msg.Handle<SteamFriends.ChatMemberInfoCallback>(callback =>
@@ -224,39 +224,39 @@ namespace EzSteam
                 {
                     case EChatMemberStateChange.Entered:
                         if (OnUserEnter != null)
-                            OnUserEnter(this, new SteamUser(Bot, callback.StateChangeInfo.ChatterActedOn));
+                            OnUserEnter(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn));
 
                         _users.Add(callback.StateChangeInfo.ChatterActedOn);
                         break;
 
                     case EChatMemberStateChange.Left:
                     case EChatMemberStateChange.Disconnected:
-                        var leaveReason = state == EChatMemberStateChange.Left ? SteamRoomLeaveReason.Left : SteamRoomLeaveReason.Disconnected;
+                        var leaveReason = state == EChatMemberStateChange.Left ? SteamChatLeaveReason.Left : SteamChatLeaveReason.Disconnected;
                         if (OnUserLeave != null)
-                            OnUserLeave(this, new SteamUser(Bot, callback.StateChangeInfo.ChatterActedOn), leaveReason);
+                            OnUserLeave(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), leaveReason);
 
                         _users.Remove(callback.StateChangeInfo.ChatterActedOn);
                         break;
 
                     case EChatMemberStateChange.Kicked:
                     case EChatMemberStateChange.Banned:
-                        var bootReason = state == EChatMemberStateChange.Kicked ? SteamRoomLeaveReason.Kicked : SteamRoomLeaveReason.Banned;
-                        if (callback.StateChangeInfo.ChatterActedOn == Bot.Id)
+                        var bootReason = state == EChatMemberStateChange.Kicked ? SteamChatLeaveReason.Kicked : SteamChatLeaveReason.Banned;
+                        if (callback.StateChangeInfo.ChatterActedOn == Bot.SteamId)
                         {
                             Leave(bootReason);
                         }
                         else
                         {
                             if (OnUserLeave != null)
-                                OnUserLeave(this, new SteamUser(Bot, callback.StateChangeInfo.ChatterActedOn), bootReason, new SteamUser(Bot, callback.StateChangeInfo.ChatterActedBy));
+                                OnUserLeave(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), bootReason, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedBy));
                         }
 
                         _users.Remove(callback.StateChangeInfo.ChatterActedOn);
                         break;
                 }
             });
-            
-            // Steam sends PersonaStateCallbacks for every user in the room before sending ChatEnterCallback
+
+            // Steam sends PersonaStateCallbacks for every user in the chat before sending ChatEnterCallback
             msg.Handle<SteamFriends.PersonaStateCallback>(callback =>
             {
                 if (callback.SourceSteamID != Id || !_timeout.IsRunning)
