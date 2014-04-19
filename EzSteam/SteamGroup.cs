@@ -5,23 +5,14 @@ using SteamKit2;
 
 namespace EzSteam
 {
-    public enum SteamGroupRank : byte
-    {
-        Guest = 0,
-        Owner = 1,
-        Officer = 2,
-        Member = 4,
-        Moderator = 8
-    }
-
     public sealed class SteamGroup
     {
         public sealed class Member
         {
             public readonly SteamUser User;
-            public SteamGroupRank Rank { get; internal set; }
+            public EClanPermission Rank { get; internal set; }
 
-            public Member(SteamUser user, SteamGroupRank rank)
+            public Member(SteamUser user, EClanPermission rank)
             {
                 User = user;
                 Rank = rank;
@@ -66,7 +57,7 @@ namespace EzSteam
             _members = new List<Member>();
         }
 
-        internal void SetRank(SteamID id, SteamGroupRank rank)
+        internal void SetRank(SteamID id, EClanPermission rank)
         {
             var member = _members.FirstOrDefault(m => m.User.Id == id);
             if (member == null)

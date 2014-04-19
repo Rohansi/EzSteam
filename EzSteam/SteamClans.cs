@@ -104,7 +104,7 @@ namespace EzSteam
                         reader.ReadByte(); // 2
 
                         ReadString(reader); // Details
-                        var rank = (SteamGroupRank)reader.ReadByte();
+                        var rank = (EClanPermission)reader.ReadByte();
                         reader.ReadBytes(6); // who knows
 
                         clan.SetRank(steamId, rank);
@@ -153,7 +153,7 @@ namespace EzSteam
                 reader.ReadInt32();
                 reader.ReadByte(); // 2
                 ReadString(reader); // Details
-                var rank = (SteamGroupRank)reader.ReadByte();
+                var rank = (EClanPermission)reader.ReadByte();
                 
                 clan.SetRank(steamId, rank);
             }
