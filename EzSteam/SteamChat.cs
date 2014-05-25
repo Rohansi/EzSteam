@@ -124,9 +124,6 @@ namespace EzSteam
         /// </summary>
         public void Leave(SteamChatLeaveReason reason)
         {
-            if (!IsActive)
-                return;
-
             IsActive = false;
 
             if (Bot.Running)
