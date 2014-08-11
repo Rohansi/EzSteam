@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using SteamKit2;
@@ -30,12 +31,14 @@ namespace EzSteam
 
         /// <summary>
         /// Create a new SteamBot. Username and password must be for the Steam account you
-        /// want it to use. Steam Guard may need to be disabled for login to work.
+        /// want it to use. A Steam Guard authorization code may need to be provided for
+        /// login to work.
         /// </summary>
-        public SteamBot(string username, string password)
+        public SteamBot(string username, string password, string authCode = null)
         {
             _username = username;
             _password = password;
+            _authCode = authCode;
         }
 
         /// <summary>
@@ -141,7 +144,7 @@ namespace EzSteam
                 lock (_chats)
                     return _chats.ToList();
             }
-        } 
+        }
 
         /// <summary>
         /// Gets or sets a game the logged in persona should be playing. Only supports non-Steam games.
@@ -280,6 +283,7 @@ namespace EzSteam
 
         private readonly string _username;
         private readonly string _password;
+        private readonly string _authCode;
 
         private List<SteamChat> _chats;
         private Thread _updateThread;
@@ -320,17 +324,59 @@ namespace EzSteam
                         return;
                     }
 
+                    byte[] sentryHash = null;
+
+                    try
+                    {
+                        if (File.Exists(GetSentryFileName()))
+                        {
+                            // if we have a saved sentry file, read and sha-1 hash it
+                            byte[] sentryFile = File.ReadAllBytes(GetSentryFileName());
+                            sentryHash = CryptoHelper.SHAHash(sentryFile);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // just in case
+                    }
+
                     SteamUser.LogOn(new SteamUser.LogOnDetails
                     {
                         Username = _username,
-                        Password = _password
+                        Password = _password,
+                        AuthCode = _authCode,
+                        SentryFileHash = sentryHash
                     });
                 });
 
-                msg.Handle<SteamClient.DisconnectedCallback>(callback =>
+                msg.Handle<SteamUser.UpdateMachineAuthCallback>(callback =>
                 {
-                    Disconnect();
+                    // confirm and save sentry file
+
+                    var sentryHash = CryptoHelper.SHAHash(callback.Data);
+
+                    File.WriteAllBytes(GetSentryFileName(), callback.Data);
+
+                    SteamUser.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
+                    {
+                        JobID = callback.JobID,
+
+                        FileName = callback.FileName,
+
+                        BytesWritten = callback.BytesToWrite,
+                        FileSize = callback.Data.Length,
+                        Offset = callback.Offset,
+
+                        Result = EResult.OK,
+                        LastError = 0,
+
+                        OneTimePassword = callback.OneTimePassword,
+
+                        SentryFileHash = sentryHash
+                    });
                 });
+
+                msg.Handle<SteamClient.DisconnectedCallback>(callback => Disconnect());
 
                 msg.Handle<SteamUser.LoggedOnCallback>(callback =>
                 {
@@ -354,10 +400,7 @@ namespace EzSteam
                         OnConnected(this);
                 });
 
-                msg.Handle<SteamUser.LoggedOffCallback>(callback =>
-                {
-                    Disconnect(SteamBotDisconnectReason.LoggedOff);
-                });
+                msg.Handle<SteamUser.LoggedOffCallback>(callback => Disconnect(SteamBotDisconnectReason.LoggedOff));
 
                 msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
                 {
@@ -393,6 +436,11 @@ namespace EzSteam
                     chat.Handle(msg);
                 }
             }
+        }
+
+        private string GetSentryFileName()
+        {
+            return string.Format("sentry_{0}.bin", _username);
         }
     }
 }

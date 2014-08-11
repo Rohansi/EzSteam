@@ -1,4 +1,5 @@
 ﻿{
     "Username": "USERNAME",
-    "Password": "PASSWORD"
+    "Password": "PASSWORD",
+    "AuthCode": ""
 }

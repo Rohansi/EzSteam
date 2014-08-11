@@ -46,7 +46,7 @@ namespace EzSteam
         public IEnumerable<Member> Members { get { return _members.ToList(); } }
 
         private readonly List<Member> _members;
-         
+
         internal SteamGroup(SteamBot bot, SteamID id)
         {
             if (!id.IsClanAccount)

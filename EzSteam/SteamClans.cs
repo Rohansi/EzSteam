@@ -142,7 +142,7 @@ namespace EzSteam
 
                 if (infoMsg.Body.Type == EChatInfoType.MemberLimitChange)
                     return;
-                
+
                 reader.ReadByte(); // 0
                 ReadString(reader); // MessageObject
                 reader.ReadByte(); // 7
@@ -154,7 +154,7 @@ namespace EzSteam
                 reader.ReadByte(); // 2
                 ReadString(reader); // Details
                 var rank = (EClanPermission)reader.ReadByte();
-                
+
                 clan.SetRank(steamId, rank);
             }
         }
