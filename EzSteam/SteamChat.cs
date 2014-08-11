@@ -171,7 +171,7 @@ namespace EzSteam
             _timeout.Start();
         }
 
-        internal void Handle(CallbackMsg msg)
+        internal void Handle(ICallbackMsg msg)
         {
             if (_timeout.Elapsed.TotalSeconds > 5)
                 Leave(SteamChatLeaveReason.JoinTimeout);
@@ -188,7 +188,7 @@ namespace EzSteam
                 }
 
                 _timeout.Stop();
-                
+
                 if (OnEnter != null)
                     OnEnter(this);
             });
