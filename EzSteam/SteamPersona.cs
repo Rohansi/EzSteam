@@ -51,7 +51,7 @@ namespace EzSteam
         /// </summary>
         public string PlayingName
         {
-            get { return Bot.SteamFriends.GetFriendGamePlayedName(Id); }
+            get { return Playing != 0 ? Bot.SteamFriends.GetFriendGamePlayedName(Id) : null; }
         }
 
         internal SteamPersona(SteamBot bot, SteamID id)
