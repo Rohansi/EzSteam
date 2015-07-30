@@ -381,7 +381,12 @@ namespace EzSteam
                 msg.Handle<SteamUser.LoggedOnCallback>(callback =>
                 {
                     if (callback.Result == EResult.OK)
+                    {
+                        if (OnConnected != null)
+                            OnConnected(this);
+
                         return;
+                    }
 
                     var res = SteamBotDisconnectReason.LoginFailed;
 
@@ -394,13 +399,10 @@ namespace EzSteam
                     Disconnect(res);
                 });
 
-                msg.Handle<SteamUser.LoginKeyCallback>(callback =>
+                msg.Handle<SteamUser.LoggedOffCallback>(callback =>
                 {
-                    if (OnConnected != null)
-                        OnConnected(this);
+                    Disconnect(SteamBotDisconnectReason.LoggedOff);
                 });
-
-                msg.Handle<SteamUser.LoggedOffCallback>(callback => Disconnect(SteamBotDisconnectReason.LoggedOff));
 
                 msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
                 {
