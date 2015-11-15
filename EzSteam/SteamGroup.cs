@@ -43,7 +43,7 @@ namespace EzSteam
         /// Gets the list of known members in this group. This will most likely not contain all
         /// members in the group.
         /// </summary>
-        public IEnumerable<Member> Members { get { return _members.ToList(); } }
+        public IEnumerable<Member> Members => _members.ToList();
 
         private readonly List<Member> _members;
 

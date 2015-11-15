@@ -66,10 +66,7 @@ namespace EzSteam
         /// <summary>
         /// Gets the Group instance (or null if not a group) for the chat.
         /// </summary>
-        public SteamGroup Group
-        {
-            get { return Bot.SteamClans.Get(Id); }
-        }
+        public SteamGroup Group => Bot.SteamClans.Get(Id);
 
         /// <summary>
         /// Toggle for echoing sent messages to the OnMessage event.
@@ -115,8 +112,8 @@ namespace EzSteam
             else
                 Bot.SteamFriends.SendChatMessage(Id, EChatEntryType.ChatMsg, message);
 
-            if (EchoSelf && OnMessage != null)
-                OnMessage(this, new SteamPersona(Bot, Bot.SteamId), message);
+            if (EchoSelf)
+                OnMessage?.Invoke(this, new SteamPersona(Bot, Bot.SteamId), message);
         }
 
         /// <summary>
@@ -129,8 +126,7 @@ namespace EzSteam
             if (Bot.Running)
                 Bot.SteamFriends.LeaveChat(Id);
 
-            if (OnLeave != null)
-                OnLeave(this, reason);
+            OnLeave?.Invoke(this, reason);
         }
 
         /// <summary>
@@ -189,8 +185,7 @@ namespace EzSteam
 
                 _timeout.Stop();
 
-                if (OnEnter != null)
-                    OnEnter(this);
+                OnEnter?.Invoke(this);
             });
 
             msg.Handle<SteamFriends.ChatMsgCallback>(callback =>
@@ -198,8 +193,7 @@ namespace EzSteam
                 if (callback.ChatMsgType != EChatEntryType.ChatMsg || callback.ChatRoomID != Id)
                     return;
 
-                if (OnMessage != null)
-                    OnMessage(this, new SteamPersona(Bot, callback.ChatterID), callback.Message);
+                OnMessage?.Invoke(this, new SteamPersona(Bot, callback.ChatterID), callback.Message);
             });
 
             msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
@@ -207,8 +201,7 @@ namespace EzSteam
                 if (callback.EntryType != EChatEntryType.ChatMsg || callback.Sender != Id)
                     return;
 
-                if (OnMessage != null)
-                    OnMessage(this, new SteamPersona(Bot, callback.Sender), callback.Message);
+                OnMessage?.Invoke(this, new SteamPersona(Bot, callback.Sender), callback.Message);
             });
 
             msg.Handle<SteamFriends.ChatMemberInfoCallback>(callback =>
@@ -220,8 +213,7 @@ namespace EzSteam
                 switch (state)
                 {
                     case EChatMemberStateChange.Entered:
-                        if (OnUserEnter != null)
-                            OnUserEnter(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn));
+                        OnUserEnter?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn));
 
                         _users.Add(callback.StateChangeInfo.ChatterActedOn);
                         break;
@@ -229,8 +221,7 @@ namespace EzSteam
                     case EChatMemberStateChange.Left:
                     case EChatMemberStateChange.Disconnected:
                         var leaveReason = state == EChatMemberStateChange.Left ? SteamChatLeaveReason.Left : SteamChatLeaveReason.Disconnected;
-                        if (OnUserLeave != null)
-                            OnUserLeave(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), leaveReason);
+                        OnUserLeave?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), leaveReason);
 
                         _users.Remove(callback.StateChangeInfo.ChatterActedOn);
                         break;
@@ -244,8 +235,7 @@ namespace EzSteam
                         }
                         else
                         {
-                            if (OnUserLeave != null)
-                                OnUserLeave(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), bootReason, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedBy));
+                            OnUserLeave?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), bootReason, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedBy));
                         }
 
                         _users.Remove(callback.StateChangeInfo.ChatterActedOn);

@@ -69,10 +69,7 @@ namespace EzSteam
         /// <summary>
         /// Gets the SteamID of the logged in Steam account.
         /// </summary>
-        public SteamID SteamId
-        {
-            get { return SteamUser.SteamID; }
-        }
+        public SteamID SteamId => SteamUser.SteamID;
 
         /// <summary>
         /// Gets or sets the state of the logged in user.
@@ -186,7 +183,7 @@ namespace EzSteam
             SteamClient.AddHandler(SteamClans);
 
             SteamClient.Connect();
-
+            
             _chats = new List<SteamChat>();
 
             Running = true;
@@ -210,8 +207,7 @@ namespace EzSteam
             lock (_chats)
                 _chats.Clear();
 
-            if (OnDisconnected != null)
-                OnDisconnected(this, reason);
+            OnDisconnected?.Invoke(this, reason);
         }
 
         /// <summary>
@@ -382,8 +378,7 @@ namespace EzSteam
                 {
                     if (callback.Result == EResult.OK)
                     {
-                        if (OnConnected != null)
-                            OnConnected(this);
+                        OnConnected?.Invoke(this);
 
                         return;
                     }
@@ -412,8 +407,7 @@ namespace EzSteam
                     {
                         var c = Join(callback.Sender);
 
-                        if (OnPrivateEnter != null)
-                            OnPrivateEnter(this, c);
+                        OnPrivateEnter?.Invoke(this, c);
                     }
                 });
 
@@ -422,15 +416,14 @@ namespace EzSteam
                     foreach (var friend in callback.FriendList)
                     {
                         var f = friend;
-                        if (friend.Relationship == EFriendRelationship.RequestRecipient && OnFriendRequest != null)
-                            OnFriendRequest(this, new SteamPersona(this, f.SteamID));
+                        if (friend.Relationship == EFriendRelationship.RequestRecipient)
+                            OnFriendRequest?.Invoke(this, new SteamPersona(this, f.SteamID));
                     }
                 });
 
                 msg.Handle<SteamFriends.ChatInviteCallback>(callback =>
                 {
-                    if (OnChatInvite != null)
-                        OnChatInvite(this, new SteamPersona(this, callback.PatronID), callback.ChatRoomID);
+                    OnChatInvite?.Invoke(this, new SteamPersona(this, callback.PatronID), callback.ChatRoomID);
                 });
 
                 foreach (var chat in Chats)
@@ -442,7 +435,7 @@ namespace EzSteam
 
         private string GetSentryFileName()
         {
-            return string.Format("sentry_{0}.bin", _username);
+            return $"sentry_{_username}.bin";
         }
     }
 }
