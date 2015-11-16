@@ -179,9 +179,10 @@ namespace EzSteam
             SteamClient = new SteamClient();
             SteamUser = SteamClient.GetHandler<SteamUser>();
             SteamFriends = SteamClient.GetHandler<SteamFriends>();
-            SteamClans = new SteamClans(this);
-            SteamClient.AddHandler(SteamClans);
 
+            CallbackManager = new CallbackManager(SteamClient);
+            InitializeCallbacks();
+            
             SteamClient.Connect();
             
             _chats = new List<SteamChat>();
@@ -226,6 +227,7 @@ namespace EzSteam
                 return chatsCopy.Find(r => r.Id == chatId);
 
             var chat = new SteamChat(this, chatId);
+            chat.Subscribe();
             SteamFriends.JoinChat(chatId);
 
             lock (_chats)
@@ -262,19 +264,23 @@ namespace EzSteam
         /// <summary>
         /// Provides access to the internal SteamKit SteamClient instance.
         /// </summary>
-        public SteamClient SteamClient;
+        public SteamClient SteamClient { get; private set; }
+
+        /// <summary>
+        /// Provides access to the internal SteamKit CallbackManager instance.
+        /// </summary>
+        public CallbackManager CallbackManager { get; private set; }
 
         /// <summary>
         /// Provides access to the internal SteamKit SteamUser instance.
         /// </summary>
-        public SteamUser SteamUser;
+        public SteamUser SteamUser { get; private set; }
 
         /// <summary>
         /// Provides access to the internal SteamKit SteamFriends instance.
         /// </summary>
-        public SteamFriends SteamFriends;
-
-        internal SteamClans SteamClans;
+        public SteamFriends SteamFriends { get; private set; }
+        
         internal bool Running;
 
         private readonly string _username;
@@ -287,6 +293,123 @@ namespace EzSteam
 
         private Stopwatch _timeSinceLast;
 
+        private void InitializeCallbacks()
+        {
+            CallbackManager.Subscribe<SteamClient.ConnectedCallback>(callback =>
+            {
+                if (callback.Result != EResult.OK)
+                {
+                    Disconnect(SteamBotDisconnectReason.ConnectFailed);
+                    return;
+                }
+
+                byte[] sentryHash = null;
+
+                try
+                {
+                    if (File.Exists(GetSentryFileName()))
+                    {
+                        // if we have a saved sentry file, read and sha-1 hash it
+                        byte[] sentryFile = File.ReadAllBytes(GetSentryFileName());
+                        sentryHash = CryptoHelper.SHAHash(sentryFile);
+                    }
+                }
+                catch (Exception)
+                {
+                    // just in case
+                }
+
+                SteamUser.LogOn(new SteamUser.LogOnDetails
+                {
+                    Username = _username,
+                    Password = _password,
+                    AuthCode = _authCode,
+                    SentryFileHash = sentryHash
+                });
+            });
+
+            CallbackManager.Subscribe<SteamUser.UpdateMachineAuthCallback>(callback =>
+            {
+                // confirm and save sentry file
+
+                var sentryHash = CryptoHelper.SHAHash(callback.Data);
+
+                File.WriteAllBytes(GetSentryFileName(), callback.Data);
+
+                SteamUser.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
+                {
+                    JobID = callback.JobID,
+
+                    FileName = callback.FileName,
+
+                    BytesWritten = callback.BytesToWrite,
+                    FileSize = callback.Data.Length,
+                    Offset = callback.Offset,
+
+                    Result = EResult.OK,
+                    LastError = 0,
+
+                    OneTimePassword = callback.OneTimePassword,
+
+                    SentryFileHash = sentryHash
+                });
+            });
+
+            CallbackManager.Subscribe<SteamClient.DisconnectedCallback>(callback => Disconnect());
+
+            CallbackManager.Subscribe<SteamUser.LoggedOnCallback>(callback =>
+            {
+                if (callback.Result == EResult.OK)
+                {
+                    OnConnected?.Invoke(this);
+
+                    return;
+                }
+
+                var res = SteamBotDisconnectReason.LoginFailed;
+
+                if (callback.Result == EResult.AccountLogonDenied)
+                    res = SteamBotDisconnectReason.SteamGuard;
+
+                if (callback.Result == EResult.InvalidPassword)
+                    res = SteamBotDisconnectReason.WrongPassword;
+
+                Disconnect(res);
+            });
+
+            CallbackManager.Subscribe<SteamUser.LoggedOffCallback>(callback =>
+            {
+                Disconnect(SteamBotDisconnectReason.LoggedOff);
+            });
+
+            CallbackManager.Subscribe<SteamFriends.FriendMsgCallback>(callback =>
+            {
+                if (callback.EntryType != EChatEntryType.ChatMsg) return;
+
+                if (Chats.Count(c => c.Id == callback.Sender) == 0)
+                {
+                    var c = Join(callback.Sender);
+
+                    OnPrivateEnter?.Invoke(this, c);
+                }
+            });
+
+            CallbackManager.Subscribe<SteamFriends.FriendsListCallback>(callback =>
+            {
+                foreach (var friend in callback.FriendList)
+                {
+                    var f = friend;
+                    if (friend.Relationship == EFriendRelationship.RequestRecipient)
+                        OnFriendRequest?.Invoke(this, new SteamPersona(this, f.SteamID));
+                }
+            });
+
+            CallbackManager.Subscribe<SteamFriends.ChatInviteCallback>(callback =>
+            {
+                OnChatInvite?.Invoke(this, new SteamPersona(this, callback.PatronID), callback.ChatRoomID);
+            });
+        }
+
         private void Run()
         {
             _timeSinceLast = Stopwatch.StartNew();
@@ -294,10 +417,21 @@ namespace EzSteam
             while (Running)
             {
                 lock (_chats)
-                    _chats.RemoveAll(c => !c.IsActive);
+                {
+                    var inactiveChats = _chats.Where(c => !c.IsActive).ToList();
+                    foreach (var chat in inactiveChats)
+                    {
+                        chat.Unsubscribe();
+                        _chats.Remove(chat);
+                    }
+                }
 
-                var msg = SteamClient.GetCallback(true);
-                if (msg == null)
+                var timer = Stopwatch.StartNew();
+                CallbackManager.RunWaitCallbacks(TimeSpan.FromSeconds(5));
+                var elapsed = timer.Elapsed.TotalSeconds;
+                var gotMessage = elapsed < 4.75;
+
+                if (!gotMessage)
                 {
                     // SteamUser.SessionTokenCallback should come in every 5 minutes
                     if (_timeSinceLast.Elapsed.TotalMinutes >= 10)
@@ -305,130 +439,15 @@ namespace EzSteam
                         Disconnect();
                         break;
                     }
-
-                    Thread.Sleep(1);
-                    continue;
                 }
-
-                _timeSinceLast.Restart();
-
-                msg.Handle<SteamClient.ConnectedCallback>(callback =>
+                else
                 {
-                    if (callback.Result != EResult.OK)
-                    {
-                        Disconnect(SteamBotDisconnectReason.ConnectFailed);
-                        return;
-                    }
-
-                    byte[] sentryHash = null;
-
-                    try
-                    {
-                        if (File.Exists(GetSentryFileName()))
-                        {
-                            // if we have a saved sentry file, read and sha-1 hash it
-                            byte[] sentryFile = File.ReadAllBytes(GetSentryFileName());
-                            sentryHash = CryptoHelper.SHAHash(sentryFile);
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // just in case
-                    }
-
-                    SteamUser.LogOn(new SteamUser.LogOnDetails
-                    {
-                        Username = _username,
-                        Password = _password,
-                        AuthCode = _authCode,
-                        SentryFileHash = sentryHash
-                    });
-                });
-
-                msg.Handle<SteamUser.UpdateMachineAuthCallback>(callback =>
-                {
-                    // confirm and save sentry file
-
-                    var sentryHash = CryptoHelper.SHAHash(callback.Data);
-
-                    File.WriteAllBytes(GetSentryFileName(), callback.Data);
-
-                    SteamUser.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
-                    {
-                        JobID = callback.JobID,
-
-                        FileName = callback.FileName,
-
-                        BytesWritten = callback.BytesToWrite,
-                        FileSize = callback.Data.Length,
-                        Offset = callback.Offset,
-
-                        Result = EResult.OK,
-                        LastError = 0,
-
-                        OneTimePassword = callback.OneTimePassword,
-
-                        SentryFileHash = sentryHash
-                    });
-                });
-
-                msg.Handle<SteamClient.DisconnectedCallback>(callback => Disconnect());
-
-                msg.Handle<SteamUser.LoggedOnCallback>(callback =>
-                {
-                    if (callback.Result == EResult.OK)
-                    {
-                        OnConnected?.Invoke(this);
-
-                        return;
-                    }
-
-                    var res = SteamBotDisconnectReason.LoginFailed;
-
-                    if (callback.Result == EResult.AccountLogonDenied)
-                        res = SteamBotDisconnectReason.SteamGuard;
-
-                    if (callback.Result == EResult.InvalidPassword)
-                        res = SteamBotDisconnectReason.WrongPassword;
-
-                    Disconnect(res);
-                });
-
-                msg.Handle<SteamUser.LoggedOffCallback>(callback =>
-                {
-                    Disconnect(SteamBotDisconnectReason.LoggedOff);
-                });
-
-                msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
-                {
-                    if (callback.EntryType != EChatEntryType.ChatMsg) return;
-
-                    if (Chats.Count(c => c.Id == callback.Sender) == 0)
-                    {
-                        var c = Join(callback.Sender);
-
-                        OnPrivateEnter?.Invoke(this, c);
-                    }
-                });
-
-                msg.Handle<SteamFriends.FriendsListCallback>(callback =>
-                {
-                    foreach (var friend in callback.FriendList)
-                    {
-                        var f = friend;
-                        if (friend.Relationship == EFriendRelationship.RequestRecipient)
-                            OnFriendRequest?.Invoke(this, new SteamPersona(this, f.SteamID));
-                    }
-                });
-
-                msg.Handle<SteamFriends.ChatInviteCallback>(callback =>
-                {
-                    OnChatInvite?.Invoke(this, new SteamPersona(this, callback.PatronID), callback.ChatRoomID);
-                });
+                    _timeSinceLast.Restart();
+                }
 
                 foreach (var chat in Chats)
                 {
-                    chat.Handle(msg);
+                    chat.Update();
                 }
             }
         }

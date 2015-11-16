@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using SteamKit2;
@@ -50,8 +51,7 @@ namespace EzSteam
                     return Bot.SteamFriends.GetFriendPersonaName(Id);
                 if (Id.AccountInstance == 3260)
                     return string.Join(" + ", Users.Select(u => u.DisplayName));
-                var clan = Bot.SteamClans.Get(Id);
-                return clan != null ? clan.Name : "[unknown]";
+                return Bot.SteamFriends.GetClanName(Id) ?? "[unknown]";
             }
         }
 
@@ -60,13 +60,17 @@ namespace EzSteam
         /// </summary>
         public IEnumerable<SteamPersona> Users
         {
-            get { return _users.Select(id => Bot.GetPersona(id)).ToList(); }
+            get
+            {
+                lock (_users)
+                    return _users.Select(id => Bot.GetPersona(id)).ToList();
+            }
         }
 
         /// <summary>
         /// Gets the Group instance (or null if not a group) for the chat.
         /// </summary>
-        public SteamGroup Group => Bot.SteamClans.Get(Id);
+        public SteamGroup Group { get; private set; }
 
         /// <summary>
         /// Toggle for echoing sent messages to the OnMessage event.
@@ -158,6 +162,7 @@ namespace EzSteam
 
         private readonly List<SteamID> _users = new List<SteamID>();
         private readonly Stopwatch _timeout = Stopwatch.StartNew();
+        private readonly List<IDisposable> _callbackDisposables = new List<IDisposable>();
 
         internal SteamChat(SteamBot bot, SteamID id)
         {
@@ -167,90 +172,129 @@ namespace EzSteam
             _timeout.Start();
         }
 
-        internal void Handle(ICallbackMsg msg)
+        internal void Subscribe()
+        {
+            var callbackMgr = Bot.CallbackManager;
+
+            lock (_callbackDisposables)
+            {
+                _callbackDisposables.Add(callbackMgr.Subscribe<SteamFriends.ChatEnterCallback>(callback =>
+                {
+                    if (callback.ChatID != Id)
+                        return;
+
+                    if (callback.EnterResponse != EChatRoomEnterResponse.Success)
+                    {
+                        Leave(SteamChatLeaveReason.JoinFailed);
+                        return;
+                    }
+
+                    _timeout.Stop();
+
+                    if (callback.ClanID != 0)
+                        Group = new SteamGroup(Bot, callback.ClanID);
+
+                    lock (_users)
+                    {
+                        foreach (var member in callback.ChatMembers)
+                        {
+                            _users.Add(member.SteamID);
+                            Group?.SetRank(member.SteamID, member.Details);
+                        }
+                    }
+
+                    OnEnter?.Invoke(this);
+                }));
+
+                _callbackDisposables.Add(callbackMgr.Subscribe<SteamFriends.ChatMsgCallback>(callback =>
+                {
+                    if (callback.ChatRoomID != Id || callback.ChatMsgType != EChatEntryType.ChatMsg)
+                        return;
+
+                    OnMessage?.Invoke(this, new SteamPersona(Bot, callback.ChatterID), callback.Message);
+                }));
+
+                _callbackDisposables.Add(callbackMgr.Subscribe<SteamFriends.FriendMsgCallback>(callback =>
+                {
+                    if (callback.Sender != Id)
+                        return;
+
+                    switch (callback.EntryType)
+                    {
+                        case EChatEntryType.ChatMsg:
+                            OnMessage?.Invoke(this, new SteamPersona(Bot, callback.Sender), callback.Message);
+                            break;
+
+                        case EChatEntryType.LeftConversation:
+                        case EChatEntryType.Disconnected:
+                            Leave(SteamChatLeaveReason.Left);
+                            break;
+                    }
+                }));
+
+                _callbackDisposables.Add(callbackMgr.Subscribe<SteamFriends.ChatMemberInfoCallback>(callback =>
+                {
+                    if (callback.ChatRoomID != Id || callback.StateChangeInfo == null)
+                        return;
+
+                    var state = callback.StateChangeInfo.StateChange;
+                    switch (state)
+                    {
+                        case EChatMemberStateChange.Entered:
+                            OnUserEnter?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn));
+
+                            lock (_users)
+                                _users.Add(callback.StateChangeInfo.ChatterActedOn);
+
+                            Group?.SetRank(callback.StateChangeInfo.ChatterActedOn, callback.StateChangeInfo.MemberInfo.Details);
+                            break;
+
+                        case EChatMemberStateChange.Left:
+                        case EChatMemberStateChange.Disconnected:
+                            var leaveReason = state == EChatMemberStateChange.Left ? SteamChatLeaveReason.Left : SteamChatLeaveReason.Disconnected;
+                            OnUserLeave?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), leaveReason);
+
+                            lock (_users)
+                                _users.Remove(callback.StateChangeInfo.ChatterActedOn);
+                            break;
+
+                        case EChatMemberStateChange.Kicked:
+                        case EChatMemberStateChange.Banned:
+                            var bootReason = state == EChatMemberStateChange.Kicked ? SteamChatLeaveReason.Kicked : SteamChatLeaveReason.Banned;
+                            if (callback.StateChangeInfo.ChatterActedOn == Bot.SteamId)
+                            {
+                                Leave(bootReason);
+                            }
+                            else
+                            {
+                                OnUserLeave?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), bootReason, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedBy));
+                            }
+
+                            lock (_users)
+                                _users.Remove(callback.StateChangeInfo.ChatterActedOn);
+                            break;
+                    }
+                }));
+            }
+        }
+
+        internal void Unsubscribe()
+        {
+            lock (_callbackDisposables)
+            {
+                foreach (var disposable in _callbackDisposables)
+                {
+                    disposable.Dispose();
+                }
+
+                _callbackDisposables.Clear();
+            }
+        }
+
+        internal void Update()
         {
             if (_timeout.Elapsed.TotalSeconds > 5)
                 Leave(SteamChatLeaveReason.JoinTimeout);
-
-            msg.Handle<SteamClans.ChatEnterCallback>(callback =>
-            {
-                if (callback.ChatID != Id)
-                    return;
-
-                if (callback.EnterResponse != EChatRoomEnterResponse.Success)
-                {
-                    Leave(SteamChatLeaveReason.JoinFailed);
-                    return;
-                }
-
-                _timeout.Stop();
-
-                OnEnter?.Invoke(this);
-            });
-
-            msg.Handle<SteamFriends.ChatMsgCallback>(callback =>
-            {
-                if (callback.ChatMsgType != EChatEntryType.ChatMsg || callback.ChatRoomID != Id)
-                    return;
-
-                OnMessage?.Invoke(this, new SteamPersona(Bot, callback.ChatterID), callback.Message);
-            });
-
-            msg.Handle<SteamFriends.FriendMsgCallback>(callback =>
-            {
-                if (callback.EntryType != EChatEntryType.ChatMsg || callback.Sender != Id)
-                    return;
-
-                OnMessage?.Invoke(this, new SteamPersona(Bot, callback.Sender), callback.Message);
-            });
-
-            msg.Handle<SteamFriends.ChatMemberInfoCallback>(callback =>
-            {
-                if (callback.ChatRoomID != Id || callback.StateChangeInfo == null)
-                    return;
-
-                var state = callback.StateChangeInfo.StateChange;
-                switch (state)
-                {
-                    case EChatMemberStateChange.Entered:
-                        OnUserEnter?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn));
-
-                        _users.Add(callback.StateChangeInfo.ChatterActedOn);
-                        break;
-
-                    case EChatMemberStateChange.Left:
-                    case EChatMemberStateChange.Disconnected:
-                        var leaveReason = state == EChatMemberStateChange.Left ? SteamChatLeaveReason.Left : SteamChatLeaveReason.Disconnected;
-                        OnUserLeave?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), leaveReason);
-
-                        _users.Remove(callback.StateChangeInfo.ChatterActedOn);
-                        break;
-
-                    case EChatMemberStateChange.Kicked:
-                    case EChatMemberStateChange.Banned:
-                        var bootReason = state == EChatMemberStateChange.Kicked ? SteamChatLeaveReason.Kicked : SteamChatLeaveReason.Banned;
-                        if (callback.StateChangeInfo.ChatterActedOn == Bot.SteamId)
-                        {
-                            Leave(bootReason);
-                        }
-                        else
-                        {
-                            OnUserLeave?.Invoke(this, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedOn), bootReason, new SteamPersona(Bot, callback.StateChangeInfo.ChatterActedBy));
-                        }
-
-                        _users.Remove(callback.StateChangeInfo.ChatterActedOn);
-                        break;
-                }
-            });
-
-            // Steam sends PersonaStateCallbacks for every user in the chat before sending ChatEnterCallback
-            msg.Handle<SteamFriends.PersonaStateCallback>(callback =>
-            {
-                if (callback.SourceSteamID != Id || !_timeout.IsRunning)
-                    return;
-
-                _users.Add(callback.FriendID);
-            });
         }
     }
 }
