@@ -160,6 +160,7 @@ namespace EzSteam
                 Bot.SteamFriends.UnbanChatMember(Id, user);
         }
 
+        private bool _entered = false;
         private readonly List<SteamID> _users = new List<SteamID>();
         private readonly Stopwatch _timeout = Stopwatch.StartNew();
         private readonly List<IDisposable> _callbackDisposables = new List<IDisposable>();
@@ -180,8 +181,10 @@ namespace EzSteam
             {
                 _callbackDisposables.Add(callbackMgr.Subscribe<SteamFriends.ChatEnterCallback>(callback =>
                 {
-                    if (callback.ChatID != Id)
+                    if (callback.ChatID != Id || _entered)
                         return;
+
+                    _entered = true;
 
                     if (callback.EnterResponse != EChatRoomEnterResponse.Success)
                     {
@@ -196,6 +199,8 @@ namespace EzSteam
 
                     lock (_users)
                     {
+                        _users.Clear();
+
                         foreach (var member in callback.ChatMembers)
                         {
                             _users.Add(member.SteamID);
