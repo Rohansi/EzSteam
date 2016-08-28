@@ -7,12 +7,12 @@ namespace EzSteam
         /// <summary>
         /// Provides access to the associated Bot instance.
         /// </summary>
-        public readonly SteamBot Bot;
+        public SteamBot Bot { get; }
 
         /// <summary>
         /// Gets the persona's Steam ID.
         /// </summary>
-        public readonly SteamID Id;
+        public SteamID Id { get; }
 
         /// <summary>
         /// Gets the persona's current name.

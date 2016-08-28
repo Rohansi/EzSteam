@@ -138,7 +138,7 @@ namespace EzSteam
         {
             get
             {
-                lock (_chats)
+                lock (_sync)
                     return _chats.ToList();
             }
         }
@@ -185,7 +185,8 @@ namespace EzSteam
             
             SteamClient.Connect();
             
-            _chats = new List<SteamChat>();
+            lock (_sync)
+                _chats = new List<SteamChat>();
 
             Running = true;
             _updateThread = new Thread(Run);
@@ -205,7 +206,7 @@ namespace EzSteam
                 chat.Leave(SteamChatLeaveReason.Disconnected);
             }
 
-            lock (_chats)
+            lock (_sync)
                 _chats.Clear();
 
             OnDisconnected?.Invoke(this, reason);
@@ -230,7 +231,7 @@ namespace EzSteam
             chat.Subscribe();
             SteamFriends.JoinChat(chatId);
 
-            lock (_chats)
+            lock (_sync)
                 _chats.Add(chat);
 
             return chat;
@@ -280,7 +281,9 @@ namespace EzSteam
         /// Provides access to the internal SteamKit SteamFriends instance.
         /// </summary>
         public SteamFriends SteamFriends { get; private set; }
-        
+
+        private readonly object _sync = new object();
+
         internal bool Running;
 
         private readonly string _username;
@@ -416,7 +419,7 @@ namespace EzSteam
 
             while (Running)
             {
-                lock (_chats)
+                lock (_sync)
                 {
                     var inactiveChats = _chats.Where(c => !c.IsActive).ToList();
                     foreach (var chat in inactiveChats)

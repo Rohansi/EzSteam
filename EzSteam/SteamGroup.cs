@@ -9,7 +9,7 @@ namespace EzSteam
     {
         public sealed class Member
         {
-            public readonly SteamPersona Persona;
+            public SteamPersona Persona { get; }
             public EClanPermission Rank { get; internal set; }
 
             public Member(SteamPersona persona, EClanPermission rank)
@@ -22,12 +22,12 @@ namespace EzSteam
         /// <summary>
         /// Provides access to the associated Bot instance.
         /// </summary>
-        public readonly SteamBot Bot;
+        public SteamBot Bot { get; }
 
         /// <summary>
         /// Gets the group's Steam ID.
         /// </summary>
-        public readonly SteamID Id;
+        public SteamID Id { get; }
 
         /// <summary>
         /// Gets the group's name.

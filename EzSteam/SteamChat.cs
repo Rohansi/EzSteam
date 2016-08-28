@@ -28,12 +28,12 @@ namespace EzSteam
         /// <summary>
         /// Provides access to the associated Bot instance.
         /// </summary>
-        public readonly SteamBot Bot;
+        public SteamBot Bot { get; }
 
         /// <summary>
         /// Gets the SteamID of the chat.
         /// </summary>
-        public readonly SteamID Id;
+        public SteamID Id { get; }
 
         /// <summary>
         /// Returns true while the chat is available for use.
@@ -75,7 +75,7 @@ namespace EzSteam
         /// <summary>
         /// Toggle for echoing sent messages to the OnMessage event.
         /// </summary>
-        public bool EchoSelf = false;
+        public bool EchoSelf { get; } = false;
 
         /// <summary>
         /// Called when the chat was entered successfully.
@@ -160,7 +160,7 @@ namespace EzSteam
                 Bot.SteamFriends.UnbanChatMember(Id, user);
         }
 
-        private bool _entered = false;
+        private bool _entered;
         private readonly List<SteamID> _users = new List<SteamID>();
         private readonly Stopwatch _timeout = Stopwatch.StartNew();
         private readonly List<IDisposable> _callbackDisposables = new List<IDisposable>();
