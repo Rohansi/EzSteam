@@ -198,8 +198,12 @@ namespace EzSteam
         /// </summary>
         public void Disconnect(SteamBotDisconnectReason reason = SteamBotDisconnectReason.Disconnected)
         {
-            SteamClient.Disconnect();
             Running = false;
+
+            SteamUser = null;
+            SteamFriends = null;
+            SteamClient?.Disconnect();
+            SteamClient = null;
 
             foreach (var chat in Chats)
             {

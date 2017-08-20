@@ -47,6 +47,8 @@ namespace EzSteam
         {
             get
             {
+                if (!Bot.Running)
+                    return "[disconnected]";
                 if (Id.IsIndividualAccount)
                     return Bot.SteamFriends.GetFriendPersonaName(Id);
                 if (Id.AccountInstance == 3260)
@@ -62,6 +64,9 @@ namespace EzSteam
         {
             get
             {
+                if (!Bot.Running)
+                    return new SteamPersona[0];
+
                 lock (_users)
                     return _users.Select(id => Bot.GetPersona(id)).ToList();
             }
@@ -108,7 +113,7 @@ namespace EzSteam
         /// </summary>
         public void Send(string message)
         {
-            if (!IsActive)
+            if (!Bot.Running || !IsActive)
                 return;
 
             if (Id.IsChatAccount)

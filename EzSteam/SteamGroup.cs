@@ -32,12 +32,12 @@ namespace EzSteam
         /// <summary>
         /// Gets the group's name.
         /// </summary>
-        public string Name => Bot.SteamFriends.GetClanName(Id);
+        public string Name => Bot.SteamFriends?.GetClanName(Id);
 
         /// <summary>
         /// Gets the group's current avatar.
         /// </summary>
-        public byte[] Avatar => Bot.SteamFriends.GetClanAvatar(Id);
+        public byte[] Avatar => Bot.SteamFriends?.GetClanAvatar(Id);
 
         /// <summary>
         /// Gets the list of known members in this group. This will most likely not contain all
